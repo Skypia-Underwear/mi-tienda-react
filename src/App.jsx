@@ -1,6 +1,37 @@
 import { useState, useEffect, useCallback } from 'react';
-import Swal from 'sweetalert2';
-import Fancybox from '@fancyapps/ui/dist/fancybox/fancybox.umd';
+// import Swal from 'sweetalert2';
+// import Fancybox from '@fancyapps/ui/dist/fancybox/fancybox.umd';
+
+// Se asume que Tailwind CSS está disponible globalmente a través del CDN.
+// Se asume que Font Awesome está disponible a través de un CDN.
+
+// Se usa la URL de la API de Apps Script para registrar ventas
+const API_URL = "https://script.google.com/macros/s/AKfycbzhEAEYVA23jaWlN5XgjlsrbiA6yK1quYf9NAuKOevD52w-6NqyfiFGUTDL9pjOKljzkA/exec";
+const DONWEB_JSON_URL = "https://castfer.com.ar/configuracion_json.php";
+
+// Mock para SweetAlert2 si no está disponible
+const Swal = {
+  fire: (options) => {
+    window.alert(options.title + (options.text ? '\n\n' + options.text : ''));
+  },
+  mixin: ({ toast, position, showConfirmButton, timer }) => {
+    return Swal;
+  }
+};
+
+// Fancybox Mock para el entorno de Canvas
+const Fancybox = {
+  bind: (selector, options) => {
+    document.querySelectorAll(selector).forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const imgSrc = el.href;
+        window.open(imgSrc, '_blank');
+      });
+    });
+  },
+};
+
 const formatMoneda = (valor, simbolo) => {
   const symbolMap = { "$": "ARS", "USD": "USD" };
   const currencyCode = symbolMap[simbolo] || "ARS";
@@ -436,60 +467,22 @@ const App = () => {
 
   // Lógica de carga de configuración con fallback
   useEffect(() => {
-    const fetchConfigFromDonweb = async () => {
+    const fetchAndSetConfig = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        const response = await fetch(DONWEB_JSON_URL);
+        const response = await fetch('/configuracion_sitio.json');
         const data = await response.json();
-        return data;
+        setConfig(data);
       } catch (error) {
-        console.warn("⚠️ Falló la carga desde tu servidor DonWeb. Intentando con macro GAS...");
-        return null;
-      }
-    };
-
-    const fetchConfigFromAppsScript = async () => {
-      try {
-        const response = await fetch(`${API_URL}?op=configuracion&callback=callback`);
-        const text = await response.text();
-        const jsonpString = text.substring(text.indexOf('(') + 1, text.lastIndexOf(')'));
-        const data = JSON.parse(jsonpString);
-        return data;
-      } catch (error) {
-        console.error("❌ Falló la carga desde Google Apps Script:", error);
+        console.error("Error al cargar configuracion_sitio.json:", error);
         Swal.fire({
           icon: 'error',
-          title: 'Error de conexión',
-          text: 'No se pudo cargar la configuración de la tienda desde ninguna fuente. Por favor, inténtelo de nuevo más tarde.'
+          title: 'Error de configuración',
+          text: 'No se pudo cargar el archivo de configuración de la tienda. Por favor, asegúrese de que el archivo existe en la carpeta `public`.'
         });
-        return null;
+      } finally {
+        setLoading(false);
       }
-    };
-    
-    const fetchAndSetConfig = async () => {
-      const storedConfig = localStorage.getItem('configuracion_pagina');
-      const storedTimestamp = localStorage.getItem('configuracion_pagina_timestamp');
-      const needsUpdate = !storedConfig || !storedTimestamp || (Date.now() - Number(storedTimestamp)) > (6 * 60 * 1000);
-
-      let data = null;
-
-      if (!needsUpdate) {
-        console.log("⚡ Usando configuración desde localStorage");
-        data = JSON.parse(storedConfig);
-      } else {
-        console.log("🔄 Actualizando configuración...");
-        data = await fetchConfigFromDonweb();
-        if (!data) {
-          data = await fetchConfigFromAppsScript();
-        }
-      }
-
-      if (data) {
-        setConfig(data);
-        localStorage.setItem('configuracion_pagina', JSON.stringify(data));
-        localStorage.setItem('configuracion_pagina_timestamp', Date.now());
-      }
-      setLoading(false);
     };
 
     fetchAndSetConfig();
